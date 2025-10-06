@@ -1,0 +1,94 @@
+graph LR
+%% Patient‑centric ontology (iterative, Memgraph‑friendly)
+%% Conventions:
+%% - Node text = Memgraph label (e.g., :Patient)
+%% - Edge text = relationship type (e.g., :HAS_ENCOUNTER)
+%% - You can add/remove nodes/edges without breaking the hub‑and‑spoke design.
+%% - Keep properties nullable; add new properties/edges additively over time.
+
+%% ==================== CORE HUB ====================
+    Patient((:Patient))
+
+%% ==================== CLINICAL ====================
+    subgraph Clinical
+      Encounter((:Encounter))
+      Condition((:Condition))
+      Procedure((:Procedure))
+      Observation((:Observation))
+      Practitioner((:Practitioner))
+      Organization((:Organization)):::prov
+      MedicationRequest((:MedicationRequest))
+    end
+
+    Patient -- ":HAS_ENCOUNTER" --> Encounter
+    Encounter -- ":HAS_CONDITION" --> Condition
+    Encounter -- ":HAS_PROCEDURE" --> Procedure
+    Encounter -- ":HAS_OBSERVATION" --> Observation
+    Encounter -- ":SEEN_BY" --> Practitioner
+    Encounter -- ":AT_FACILITY" --> Organization
+    Encounter -- ":HAS_MEDICATION_REQUEST" --> MedicationRequest
+
+%% ==================== FINANCIAL (CLAIMS/EOB) ====================
+    subgraph Claims_Adjudication
+      Claim((:Claim))
+      ExplanationOfBenefit((:ExplanationOfBenefit))
+      LineItem((:LineItem))
+      Payment((:Payment))
+      Adjustment((:Adjustment))
+    end
+
+    Encounter -- ":GENERATED_CLAIM" --> Claim
+    Patient -- ":HAS_CLAIM" --> Claim
+    Claim -- ":HAS_EOB" --> ExplanationOfBenefit
+    Claim -- ":HAS_LINE_ITEM" --> LineItem
+    LineItem -- ":ITEM_FOR_PROCEDURE" --> Procedure
+    LineItem -- ":ITEM_HAS_DIAGNOSIS" --> Condition
+    Payment -- ":APPLIED_TO" --> Claim
+    Adjustment -- ":ADJUSTED_ON" --> Claim
+
+%% ==================== BILLS (PATIENT‑PROVIDED) ====================
+    subgraph Patient_Bills
+      Invoice((:Invoice))
+      BillLineItem((:LineItem)):::billline
+      Guarantor((:Guarantor))
+    end
+
+    Patient -- ":BILLED_FOR" --> Invoice
+    Invoice -- ":HAS_LINE_ITEM" --> BillLineItem
+    BillLineItem -- ":ITEM_FOR_PROCEDURE" --> Procedure
+    BillLineItem -- ":ITEM_HAS_DIAGNOSIS" --> Condition
+    Invoice -- ":BILLED_TO" --> Guarantor
+    Payment -- ":APPLIED_TO" --> Invoice
+    Adjustment -- ":ADJUSTED_ON" --> Invoice
+
+%% ==================== INSURANCE ====================
+    subgraph Insurance
+      InsurancePlan((:InsurancePlan))
+      Payer((:Payer))
+    end
+
+    Patient -- ":COVERED_BY" --> InsurancePlan
+    InsurancePlan -- ":ISSUED_BY" --> Payer
+    Claim -- ":COVERED_BY" --> InsurancePlan
+
+%% ==================== DOCUMENT PROVENANCE ====================
+    subgraph Provenance
+      Document((:Document))
+    end
+
+    Document -- ":MENTIONS_ENTITY" --> Patient
+    Document -- ":MENTIONS_CONCEPT" --> Invoice
+    Document -- ":MENTIONS_CONCEPT" --> Claim
+    Document -- ":MENTIONS_CONCEPT" --> LineItem
+
+%% ==================== OPTIONAL LABS/REPORTS ====================
+    subgraph Diagnostics_Reporting
+      DiagnosticReport((:DiagnosticReport))
+    end
+
+    Encounter -- ":HAS_DIAGNOSTIC_REPORT" --> DiagnosticReport
+    DiagnosticReport -- ":REPORTS_OBSERVATION" --> Observation
+
+%% ==================== STYLE ====================
+    classDef prov fill:#eef,stroke:#88a,stroke-width:1px;
+    classDef billline fill:#efe,stroke:#6a6,stroke-width:1px;
